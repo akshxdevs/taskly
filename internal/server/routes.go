@@ -305,6 +305,14 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
 		return
 	}
+
+	if s.redis != nil {
+		if err := s.redis.Set(r.Context(), "auth:token:"+user.Id.String(), token, time.Hour).Err(); err != nil {
+			log.Printf("failed to cache token in redis: %v", err)
+		}
+		log.Printf("Token Stored Successfully!")
+	}
+
 	writeJSON(w, http.StatusOK, LoginResponse{
 		User:  user,
 		Token: token,
@@ -312,24 +320,29 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) CheckUserAuth(w http.ResponseWriter, r *http.Request) {
-	type UserAuth struct {
-		Token string `json:"token"`
-	}
-	var req UserAuth
-	if err := decodeJSONStrict(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
+
 	idParams := r.PathValue("id")
 	userId, err := uuid.Parse(idParams)
 	if err != nil {
 		http.Error(w, "invalid userid (uuid)", http.StatusBadRequest)
 		return
 	}
+	var reqToken string
+	if s.redis != nil {
+		key := "auth:token:" + userId.String()
+		cachedToken, err := s.redis.Get(r.Context(), key).Result()
+		if err != nil {
+			log.Printf("token fetch failed: %v", err)
+			http.Error(w, "Token not provided or invalid", http.StatusBadRequest)
+			return
+		}
+		log.Printf("Token Fetch Successfull!")
+		reqToken = cachedToken
+	}
 
 	secret := os.Getenv("AUTH_SECRET")
 	claims := &jwt.RegisteredClaims{}
-	token, err := jwt.ParseWithClaims(req.Token, claims, func(t *jwt.Token) (any, error) {
+	token, err := jwt.ParseWithClaims(reqToken, claims, func(t *jwt.Token) (any, error) {
 		if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, errors.New("unexpected signing method")
 		}
@@ -347,7 +360,7 @@ func (s *Server) CheckUserAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Token == "" {
+	if reqToken == "" {
 		http.Error(w, "Token not provided or invalid", http.StatusBadRequest)
 		return
 	}
