@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/joho/godotenv/autoload"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -24,16 +25,26 @@ type Service interface {
 	DeleteAllTask(ctx context.Context) error
 	GetAllTasks(ctx context.Context) ([]Task, error)
 	GetTaskByID(ctx context.Context, id int64) (Task, error)
+	CreateUser(ctx context.Context, username, email, password string) (User, error)
+	CheckUser(ctx context.Context, email string) (User, error)
 	Close() error
 }
 
 type Task struct {
-	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"-"`
-	UpdatedAt   time.Time `json:"-"`
+	ID          int64  `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type User struct {
+	Id        uuid.UUID `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Password  string    `json:"-"`
+	CreatedAt string    `json:"created_at"`
 }
 
 var ErrTaskNotFound = errors.New("task not found")
@@ -60,11 +71,21 @@ func New() Service {
 		log.Fatal(err)
 	}
 
-	dbInstance = &service{db: db, dsn: dsn}
-	if err := dbInstance.initTaskSchema(); err != nil {
+	scv := &service{
+		db:  db,
+		dsn: dsn,
+	}
+
+	if err := scv.initTaskSchema(); err != nil {
 		log.Fatalf("failed to initialize schema: %v", err)
 	}
-	return dbInstance
+
+	if err := scv.initUserScheme(); err != nil {
+		log.Fatalf("failed to intialize userScheme: %v", err)
+	}
+
+	dbInstance = scv
+	return scv
 }
 
 func prepareSQLiteDSN(raw string) (string, error) {
@@ -94,21 +115,25 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'todo',
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER IF NOT EXISTS tasks_set_updated_at
-AFTER UPDATE ON tasks
-FOR EACH ROW
-WHEN NEW.updated_at = OLD.updated_at
-BEGIN
-  UPDATE tasks
-  SET updated_at = CURRENT_TIMESTAMP
-  WHERE id = OLD.id;
-END;`
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`
 
 	_, err := s.db.Exec(schema)
+	return err
+}
+
+func (s *service) initUserScheme() error {
+	const query = `
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		username TEXT NOT NULL,
+		email TEXT NOT NULL UNIQUE,
+		password TEXT NOT NULL,
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+	_, err := s.db.Exec(query)
 	return err
 }
 
@@ -270,4 +295,62 @@ func (s *service) DeleteAllTask(ctx context.Context) error {
 		return ErrTaskNotFound
 	}
 	return nil
+}
+
+func (s *service) CreateUser(
+	ctx context.Context,
+	username string,
+	email string,
+	password string,
+) (User, error) {
+
+	const query = `
+		INSERT INTO users (id, username, email, password)
+		VALUES (?, ?, ?, ?)
+		RETURNING id, username, email, created_at;
+	`
+
+	var user User
+	user.Id = uuid.New()
+
+	err := s.db.QueryRowContext(
+		ctx,
+		query,
+		user.Id.String(),
+		username,
+		email,
+		password,
+	).Scan(
+		&user.Id,
+		&user.Username,
+		&user.Email,
+		&user.CreatedAt,
+	)
+
+	if err != nil {
+		return User{}, err
+	}
+
+	return user, nil
+}
+
+func (s *service) CheckUser(ctx context.Context, email string) (User, error) {
+	const query = `
+	SELECT id, username, email, password, created_at
+	FROM users
+	WHERE email = ?;
+	`
+
+	var user User
+	err := s.db.QueryRowContext(ctx, query, email).Scan(
+		&user.Id,
+		&user.Username,
+		&user.Email,
+		&user.Password,
+		&user.CreatedAt,
+	)
+	if err != nil {
+		return User{}, err
+	}
+	return user, nil
 }
