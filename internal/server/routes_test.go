@@ -103,6 +103,16 @@ func (m *mockDB) CheckUser(_ context.Context, email string) (database.User, erro
 	}, nil
 }
 
+func (m *mockDB) CheckUserById(_ context.Context, id string) (database.UserAuth, error) {
+	return database.UserAuth{
+		Id:                  id,
+		Username:            "mockuser",
+		Email:               "mock@example.com",
+		AuthStatus:          database.UserAuthenticated,
+		IsUserAuthenticated: true,
+	}, nil
+}
+
 func TestHelloWorldHandler(t *testing.T) {
 	s := &Server{db: &mockDB{}}
 
