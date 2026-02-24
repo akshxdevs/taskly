@@ -1,14 +1,24 @@
 package server
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"math/big"
 	"net/http"
+	"net/mail"
+	"os"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"go-taskly/internal/database"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -19,12 +29,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	mux.HandleFunc("/health", s.healthHandler)
 
-	mux.HandleFunc("POST /api/v1/tasks", s.CreateTask)
-	mux.HandleFunc("GET /api/v1/tasks", s.GetAllTask)
-	mux.HandleFunc("GET /api/v1/tasks/{id}", s.GetTask)
-	mux.HandleFunc("PATCH /api/v1/tasks/{id}", s.UpdateTask)
-	mux.HandleFunc("DELETE /api/v1/tasks/{id}", s.DeleteTask)
-	mux.HandleFunc("DELETE /api/v1/tasks", s.DeleteAllTask)
+	mux.Handle("POST /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.CreateTask)))
+	mux.Handle("GET /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.GetAllTask)))
+	mux.Handle("GET /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.GetTask)))
+	mux.Handle("PATCH /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.UpdateTask)))
+	mux.Handle("DELETE /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.DeleteTask)))
+	mux.Handle("DELETE /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.DeleteAllTask)))
+
+	mux.HandleFunc("POST /api/v1/user/login", s.Login)
+	mux.HandleFunc("POST /api/v1/user/signup", s.Signup)
 
 	// Wrap the mux with CORS middleware
 	return s.corsMiddleware(mux)
@@ -96,7 +109,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Status == "" {
-		req.Status = "false"
+		req.Status = "todo"
 	}
 
 	task, err := s.db.CreateTask(r.Context(), req.Title, req.Description, req.Status)
@@ -213,6 +226,89 @@ func (s *Server) DeleteAllTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) Signup(w http.ResponseWriter, r *http.Request) {
+	type LoginUserRequest struct {
+		Username string
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	var req LoginUserRequest
+	if err := decodeJSONStrict(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	_, err := mail.ParseAddress(req.Email)
+	if err != nil {
+		writeJSON(w, http.StatusNotAcceptable, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if !isValidPassword(req.Password) {
+		http.Error(w, "password must be 8+ chars, contain letters & numbers", http.StatusBadRequest)
+		return
+	}
+
+	req.Username, err = generateUserName()
+	if err != nil {
+		http.Error(w, "error: failed to generate username", http.StatusBadRequest)
+		return
+	}
+
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeJSON(w, http.StatusNotAcceptable, map[string]string{"error": err.Error()})
+		return
+	}
+
+	users, err := s.db.CreateUser(r.Context(), req.Username, req.Email, string(hashPassword))
+	if err != nil {
+		log.Printf("failed creating user: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create user"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, users)
+}
+
+func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
+	type LoginUserRequest struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	type LoginResponse struct {
+		User  database.User `json:"user"`
+		Token string        `json:"token"`
+	}
+
+	var req LoginUserRequest
+	if err := decodeJSONStrict(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// 1. Fetch user (must include password hash internally)
+	user, err := s.db.CheckUser(r.Context(), req.Email)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+
+	token, err := generateToken(user.Id.String())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
+		return
+	}
+	writeJSON(w, http.StatusOK, LoginResponse{
+		User:  user,
+		Token: token,
+	})
+}
+
 func decodeJSONStrict(r *http.Request, v any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -236,4 +332,48 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 	if _, err := w.Write(body); err != nil {
 		log.Printf("Failed to write response: %v", err)
 	}
+}
+
+func isValidPassword(p string) bool {
+	if len(p) < 8 || len(p) > 32 {
+		return false
+	}
+	hasNumber := false
+	hasString := false
+	for _, c := range p {
+		switch {
+		case unicode.IsLetter(c):
+			hasString = true
+		case unicode.IsNumber(c):
+			hasNumber = true
+		}
+	}
+	return hasNumber && hasString
+}
+
+func generateUserName() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(9000))
+	if err != nil {
+		return "", err
+	}
+
+	num := 1000 + n.Int64()
+	return fmt.Sprintf("user%d", num), nil
+
+}
+
+func generateToken(userId string) (string, error) {
+	secret := os.Getenv("AUTH_SECRET")
+	if secret == "" {
+		return "", errors.New("Auth secret is not set")
+	}
+
+	claims := jwt.MapClaims{
+		"sub": userId,
+		"iat": time.Now().Unix(),
+		"exp": time.Now().Add(1 * time.Hour).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }
