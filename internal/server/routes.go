@@ -18,6 +18,7 @@ import (
 	"go-taskly/internal/database"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -38,6 +39,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	mux.HandleFunc("POST /api/v1/user/login", s.Login)
 	mux.HandleFunc("POST /api/v1/user/signup", s.Signup)
+	mux.HandleFunc("GET /api/v1/user/auth/{id}", s.CheckUserAuth)
 
 	// Wrap the mux with CORS middleware
 	return s.corsMiddleware(mux)
@@ -307,6 +309,57 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		User:  user,
 		Token: token,
 	})
+}
+
+func (s *Server) CheckUserAuth(w http.ResponseWriter, r *http.Request) {
+	type UserAuth struct {
+		Token string `json:"token"`
+	}
+	var req UserAuth
+	if err := decodeJSONStrict(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	idParams := r.PathValue("id")
+	userId, err := uuid.Parse(idParams)
+	if err != nil {
+		http.Error(w, "invalid userid (uuid)", http.StatusBadRequest)
+		return
+	}
+
+	secret := os.Getenv("AUTH_SECRET")
+	claims := &jwt.RegisteredClaims{}
+	token, err := jwt.ParseWithClaims(req.Token, claims, func(t *jwt.Token) (any, error) {
+		if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+
+	payload := claims.Subject
+
+	if userId.String() != payload {
+		http.Error(w, "Invalid Token!", http.StatusBadRequest)
+	}
+
+	if err != nil || !token.Valid || claims.Subject == "" {
+		http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	if req.Token == "" {
+		http.Error(w, "Token not provided or invalid", http.StatusBadRequest)
+		return
+	}
+
+	auth, err := s.db.CheckUserById(r.Context(), userId.String())
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, auth)
+
 }
 
 func decodeJSONStrict(r *http.Request, v any) error {
