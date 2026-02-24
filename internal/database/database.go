@@ -76,12 +76,16 @@ func New() Service {
 		dsn: dsn,
 	}
 
-	if err := scv.initTaskSchema(); err != nil {
-		log.Fatalf("failed to initialize schema: %v", err)
-	}
-
 	if err := scv.initUserScheme(); err != nil {
 		log.Fatalf("failed to intialize userScheme: %v", err)
+	}
+
+	if _, err := scv.db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
+		log.Fatalf("failed to enable foreign keys: %v", err)
+	}
+
+	if err := scv.initTaskSchema(); err != nil {
+		log.Fatalf("failed to initialize schema: %v", err)
 	}
 
 	dbInstance = scv
@@ -112,15 +116,13 @@ func (s *service) initTaskSchema() error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'todo',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-
-FORIGIN KEY(user_id)
-	REFERENCE users(id)
-	ON DELETE CASCADE
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 `
 	_, err := s.db.Exec(schema)
