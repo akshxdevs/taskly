@@ -117,8 +117,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT NOT NULL DEFAULT 'todo',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`
 
+FORIGIN KEY(user_id)
+	REFERENCE users(id)
+	ON DELETE CASCADE
+);
+`
 	_, err := s.db.Exec(schema)
 	return err
 }
