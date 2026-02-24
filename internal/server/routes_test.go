@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"go-taskly/internal/database"
+
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type mockDB struct {
@@ -28,7 +31,7 @@ func (m *mockDB) Close() error {
 
 func (m *mockDB) CreateTask(_ context.Context, title, description, status string) (database.Task, error) {
 	m.nextID++
-	now := time.Now().UTC()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	task := database.Task{
 		ID:          m.nextID,
 		Title:       title,
@@ -45,7 +48,7 @@ func (m *mockDB) UpdateTask(_ context.Context, id int64, status string) (databas
 	for i := range m.tasks {
 		if m.tasks[i].ID == id {
 			m.tasks[i].Status = status
-			m.tasks[i].UpdatedAt = time.Now().UTC()
+			m.tasks[i].UpdatedAt = time.Now().UTC().Format("2006-01-02 15:04:05")
 			return m.tasks[i], nil
 		}
 	}
@@ -80,6 +83,26 @@ func (m *mockDB) GetTaskByID(_ context.Context, id int64) (database.Task, error)
 	return database.Task{}, database.ErrTaskNotFound
 }
 
+func (m *mockDB) CreateUser(_ context.Context, username, email, _ string) (database.User, error) {
+	return database.User{
+		Id:        uuid.New(),
+		Username:  username,
+		Email:     email,
+		CreatedAt: time.Now().UTC().Format("2006-01-02 15:04:05"),
+	}, nil
+}
+
+func (m *mockDB) CheckUser(_ context.Context, email string) (database.User, error) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pass1234"), bcrypt.DefaultCost)
+	return database.User{
+		Id:        uuid.New(),
+		Username:  "mockuser",
+		Email:     email,
+		Password:  string(hash),
+		CreatedAt: time.Now().UTC().Format("2006-01-02 15:04:05"),
+	}, nil
+}
+
 func TestHelloWorldHandler(t *testing.T) {
 	s := &Server{db: &mockDB{}}
 
@@ -96,6 +119,13 @@ func TestHelloWorldHandler(t *testing.T) {
 }
 
 func TestTaskRoutes(t *testing.T) {
+	t.Setenv("AUTH_SECRET", "test-secret")
+	token, err := generateToken(uuid.NewString())
+	if err != nil {
+		t.Fatalf("failed to generate auth token: %v", err)
+	}
+	authHeader := "Bearer " + token
+
 	db := &mockDB{}
 	s := &Server{db: db}
 	handler := s.RegisterRoutes()
@@ -103,6 +133,7 @@ func TestTaskRoutes(t *testing.T) {
 	t.Run("create task", func(t *testing.T) {
 		body := []byte(`{"title":"write tests","description":"for task handlers","status":"todo"}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -122,6 +153,7 @@ func TestTaskRoutes(t *testing.T) {
 	t.Run("reject created_at in payload", func(t *testing.T) {
 		body := []byte(`{"title":"strict payload","description":"x","status":"todo","created_at":"2026-01-01T00:00:00Z"}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -133,6 +165,7 @@ func TestTaskRoutes(t *testing.T) {
 
 	t.Run("list tasks", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -152,6 +185,7 @@ func TestTaskRoutes(t *testing.T) {
 	t.Run("get task by id", func(t *testing.T) {
 		taskID := strconv.FormatInt(db.tasks[0].ID, 10)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+taskID, nil)
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -170,6 +204,7 @@ func TestTaskRoutes(t *testing.T) {
 
 	t.Run("get missing task", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/9999", nil)
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -182,6 +217,7 @@ func TestTaskRoutes(t *testing.T) {
 	t.Run("update task status", func(t *testing.T) {
 		reqBody := []byte(`{"status":"done"}`)
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/1", bytes.NewReader(reqBody))
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -193,6 +229,7 @@ func TestTaskRoutes(t *testing.T) {
 
 	t.Run("delete task", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/tasks/1", nil)
+		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
 		handler.ServeHTTP(rr, req)
@@ -227,4 +264,57 @@ func TestGetTaskNotFoundDirectHandler(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404; got %d", rr.Code)
 	}
+}
+
+func TestAuthRoutes(t *testing.T) {
+	t.Setenv("AUTH_SECRET", "test-secret")
+
+	s := &Server{db: &mockDB{}}
+	handler := s.RegisterRoutes()
+
+	t.Run("signup", func(t *testing.T) {
+		body := []byte(`{"email":"test@example.com","password":"pass1234"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/user/signup", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusAccepted {
+			t.Fatalf("expected status 202; got %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("login success", func(t *testing.T) {
+		body := []byte(`{"email":"test@example.com","password":"pass1234"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/user/login", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected status 200; got %d body=%s", rr.Code, rr.Body.String())
+		}
+
+		var resp struct {
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode login response: %v", err)
+		}
+		if resp.Token == "" {
+			t.Fatalf("expected non-empty token")
+		}
+	})
+
+	t.Run("login invalid credentials", func(t *testing.T) {
+		body := []byte(`{"email":"test@example.com","password":"wrong1234"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/user/login", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected status 401; got %d body=%s", rr.Code, rr.Body.String())
+		}
+	})
 }
