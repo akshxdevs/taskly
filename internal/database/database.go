@@ -27,6 +27,7 @@ type Service interface {
 	GetTaskByID(ctx context.Context, id int64) (Task, error)
 	CreateUser(ctx context.Context, username, email, password string) (User, error)
 	CheckUser(ctx context.Context, email string) (User, error)
+	CheckUserById(ctx context.Context, id string) (UserAuth, error)
 	Close() error
 }
 
@@ -45,6 +46,22 @@ type User struct {
 	Email     string    `json:"email"`
 	Password  string    `json:"-"`
 	CreatedAt string    `json:"created_at"`
+}
+
+type AuthStatus string
+
+const (
+	UserAuthenticated    AuthStatus = "Authenticated"
+	UserNotAuthenticated AuthStatus = "NotAuthenticated"
+	UserNotExist         AuthStatus = "UserNotExist"
+)
+
+type UserAuth struct {
+	Id                  string     `json:"id"`
+	Username            string     `json:"username"`
+	Email               string     `json:"email"`
+	AuthStatus          AuthStatus `json:"auth_status"`
+	IsUserAuthenticated bool       `json:"is_user_authenticated"`
 }
 
 var ErrTaskNotFound = errors.New("task not found")
@@ -359,4 +376,46 @@ func (s *service) CheckUser(ctx context.Context, email string) (User, error) {
 		return User{}, err
 	}
 	return user, nil
+}
+
+func (s *service) GetUserByID(ctx context.Context, id string) (UserAuth, error) {
+	const query = `
+		SELECT id, username, email
+		FROM users
+		WHERE id = ?;
+	`
+
+	var user UserAuth
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&user.Id,
+		&user.Username,
+		&user.Email,
+	)
+	if err != nil {
+		return UserAuth{}, err
+	}
+	user.AuthStatus = UserAuthenticated
+	user.IsUserAuthenticated = true
+	return user, nil
+}
+
+func (s *service) CheckUserById(ctx context.Context, id string) (UserAuth, error) {
+	user, err := s.GetUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return UserAuth{
+				Id:                  id,
+				AuthStatus:          UserNotExist,
+				IsUserAuthenticated: false,
+			}, nil
+		}
+		return UserAuth{}, err
+	}
+	return UserAuth{
+		Id:                  user.Id,
+		Username:            user.Username,
+		Email:               user.Email,
+		AuthStatus:          UserAuthenticated,
+		IsUserAuthenticated: true,
+	}, nil
 }
