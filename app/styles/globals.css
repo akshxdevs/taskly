@@ -1,0 +1,305 @@
+@import "tailwindcss";
+
+:root {
+  --background: #090909;
+  --foreground: #f4f4f4;
+  --muted: #afafaf;
+  --card: #121212;
+  --card-stroke: #2c2c2c;
+  --btn-accent: #35ff88;
+  --btn-accent-alt: #00d4ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans:
+    "Avenir Next", "Montserrat", "Nunito Sans", "Helvetica Neue", sans-serif;
+  --font-mono:
+    "IBM Plex Mono", "JetBrains Mono", "Fira Code", "Source Code Pro", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Avenir Next", "Montserrat", "Nunito Sans", "Helvetica Neue", sans-serif;
+}
+
+.grain-bg {
+  background-image: linear-gradient(145deg, #060606 0%, #121212 52%, #080808 100%);
+}
+
+.ambient-orb {
+  position: absolute;
+  filter: blur(72px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.ambient-orb-a {
+  width: 280px;
+  height: 280px;
+  background: #35ff88;
+  top: 60px;
+  left: -40px;
+}
+
+.ambient-orb-b {
+  display: none;
+}
+
+.display-card {
+  background: linear-gradient(160deg, #151515 0%, #0f0f0f 100%);
+  border: 1px solid var(--card-stroke);
+  box-shadow:
+    0 20px 40px rgb(0 0 0 / 34%),
+    inset 0 1px 0 rgb(255 255 255 / 8%);
+}
+
+.display-pin {
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #d3d3d3 55%, #919191 100%);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 52%);
+}
+
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(to bottom, rgb(255 255 255 / 4%) 1px, transparent 1px);
+  background-size: 100% 6px;
+  opacity: 0.3;
+}
+
+.shimmer-band {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 15%,
+    rgb(255 255 255 / 8%) 45%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  animation: shimmerMove 5.2s linear infinite;
+}
+
+.float-y {
+  animation: floatY 3.2s ease-in-out infinite;
+}
+
+.pulse-border {
+  animation: pulseBorder 2.4s ease-in-out infinite;
+}
+
+.model-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.model-card::before {
+  content: "";
+  position: absolute;
+  inset: -30% auto -30% -40%;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgb(255 255 255 / 18%) 48%,
+    transparent 78%
+  );
+  transform: translateX(-180%) rotate(8deg);
+  transition: transform 520ms ease;
+}
+
+.model-card:hover {
+  transform: translateY(-4px);
+  border-color: rgb(255 255 255 / 22%);
+  box-shadow:
+    0 16px 36px rgb(0 0 0 / 36%),
+    0 0 0 1px rgb(0 212 255 / 24%) inset;
+}
+
+.model-card:hover::before {
+  transform: translateX(340%) rotate(8deg);
+}
+
+.task-desk-shell {
+  animation: deskReveal 480ms ease-out both;
+}
+
+.stat-tile {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.stat-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgb(255 255 255 / 24%);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 28%);
+}
+
+.task-row {
+  animation: deskReveal 300ms ease both;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.task-row:hover {
+  transform: translateY(-1px);
+  border-color: rgb(255 255 255 / 22%);
+  box-shadow: 0 12px 22px rgb(0 0 0 / 26%);
+}
+
+.create-btn-glow {
+  position: relative;
+  transform: translateZ(0);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    background-color 180ms ease;
+  animation: createBtnBreathe 1800ms ease-in-out infinite;
+  box-shadow:
+    0 8px 18px rgb(53 255 136 / 24%),
+    0 0 0 1px rgb(255 255 255 / 10%) inset;
+}
+
+.create-btn-glow:hover {
+  transform: translateY(-1px) scale(1.01);
+  background-color: #96ffc1;
+  box-shadow:
+    0 12px 24px rgb(53 255 136 / 32%),
+    0 0 0 1px rgb(255 255 255 / 15%) inset;
+  filter: saturate(1.05);
+}
+
+.create-btn-glow:active {
+  transform: translateY(0) scale(0.985);
+  box-shadow:
+    0 6px 14px rgb(53 255 136 / 26%),
+    0 0 0 1px rgb(255 255 255 / 12%) inset;
+}
+
+.create-btn-glow:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgb(52 211 153 / 34%),
+    0 10px 22px rgb(53 255 136 / 28%),
+    0 0 0 1px rgb(255 255 255 / 15%) inset;
+}
+
+.create-btn-glow:disabled {
+  cursor: not-allowed;
+  transform: none;
+  filter: grayscale(0.2) opacity(0.75);
+  animation: none;
+  box-shadow:
+    0 4px 10px rgb(53 255 136 / 14%),
+    0 0 0 1px rgb(255 255 255 / 8%) inset;
+}
+
+.dialog-pop {
+  animation: dialogPop 220ms ease-out both;
+}
+
+.toast-pop {
+  animation: toastPop 220ms ease-out both;
+}
+
+@keyframes shimmerMove {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes floatY {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes pulseBorder {
+  0%,
+  100% {
+    border-color: rgb(52 211 153 / 0.32);
+    box-shadow: 0 0 0 0 rgb(16 185 129 / 0.28);
+  }
+  50% {
+    border-color: rgb(52 211 153 / 0.55);
+    box-shadow: 0 0 0 6px rgb(16 185 129 / 0.06);
+  }
+}
+
+@keyframes deskReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dialogPop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastPop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes createBtnBreathe {
+  0%,
+  100% {
+    box-shadow:
+      0 8px 18px rgb(53 255 136 / 24%),
+      0 0 0 1px rgb(255 255 255 / 10%) inset;
+  }
+  50% {
+    box-shadow:
+      0 10px 22px rgb(53 255 136 / 34%),
+      0 0 0 1px rgb(255 255 255 / 16%) inset;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .create-btn-glow {
+    animation: none;
+    transition: background-color 140ms ease;
+  }
+
+  .create-btn-glow:hover,
+  .create-btn-glow:active {
+    transform: none;
+  }
+}

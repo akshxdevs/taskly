@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Taskly Frontend Architecture
 
-## Getting Started
+This frontend follows a feature-first architecture on top of Next.js App Router.
 
-First, run the development server:
+## Folder Structure
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```txt
+app/
+  layout.tsx
+  page.tsx
+  login/page.tsx
+  signup/page.tsx
+  tasks/page.tsx
+
+components/
+  ui/         reusable presentational primitives
+  layout/     shared app shells/background wrappers
+  common/     cross-feature generic components
+
+features/
+  landing/
+  auth/
+    components/
+    hooks/
+    services/
+    login/
+    signup/
+  tasks/
+    components/
+    hooks/
+    services/
+
+hooks/        global reusable hooks
+lib/
+  api/        typed API client + response parsing
+  auth/       session storage helpers
+  utils/      pure utility helpers
+  validators/ validation layer placeholder
+
+config/       env + app metadata/constants
+types/        shared domain types
+styles/       global styles
+tests/        test docs/placeholders
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Architectural Decisions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `app/` contains route entry files only. Business/UI logic lives in `features/`.
+- API calls are centralized in `lib/api`; components never call `fetch` directly.
+- Session management is isolated in `lib/auth`.
+- Each feature owns its components, hooks, services, and constants.
+- Shared primitives are promoted to `components/` only when reused.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Conventions
 
-## Learn More
+- Use alias imports (`@/…`) to avoid deep relative paths.
+- Keep route pages thin: they only import feature entry components.
+- Keep business logic in hooks/services, not inline in JSX.
+- Keep naming explicit (no `utils2`, `temp`, `helpersNew`).
+- Prefer feature-local types/constants first; promote to global `types/` only when cross-feature.
 
-To learn more about Next.js, take a look at the following resources:
+## How to Extend
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Add new product area under `features/<name>/`.
+2. Expose feature entry through `features/<name>/index.ts`.
+3. Create/adjust route file in `app/` that imports the feature entry.
+4. Add API methods in `lib/api` and consume them via feature services.

@@ -320,6 +320,10 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) CheckUserAuth(w http.ResponseWriter, r *http.Request) {
+	type CheckUserAuthResponse struct {
+		database.UserAuth
+		Token string `json:"token"`
+	}
 
 	idParams := r.PathValue("id")
 	userId, err := uuid.Parse(idParams)
@@ -371,7 +375,10 @@ func (s *Server) CheckUserAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, auth)
+	writeJSON(w, http.StatusAccepted, CheckUserAuthResponse{
+		UserAuth: auth,
+		Token:    reqToken,
+	})
 
 }
 

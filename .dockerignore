@@ -1,0 +1,14 @@
+.git
+.gitignore
+README.md
+.env
+
+app/node_modules
+app/.next
+
+tmp
+
+*.db
+*.log
+
+main
