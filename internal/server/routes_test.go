@@ -29,7 +29,7 @@ func (m *mockDB) Close() error {
 	return nil
 }
 
-func (m *mockDB) CreateTask(_ context.Context, title, description, status string) (database.Task, error) {
+func (m *mockDB) CreateTask(_ context.Context, title, description, status, _ string) (database.Task, error) {
 	m.nextID++
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	task := database.Task{

@@ -19,7 +19,7 @@ import (
 
 type Service interface {
 	Health() map[string]string
-	CreateTask(ctx context.Context, title, description, status string) (Task, error)
+	CreateTask(ctx context.Context, title, description, status, userId string) (Task, error)
 	UpdateTask(ctx context.Context, id int64, status string) (Task, error)
 	DeleteTask(ctx context.Context, id int64) error
 	DeleteAllTask(ctx context.Context) error
@@ -191,14 +191,14 @@ func (s *service) Close() error {
 	return s.db.Close()
 }
 
-func (s *service) CreateTask(ctx context.Context, title, description, status string) (Task, error) {
+func (s *service) CreateTask(ctx context.Context, title, description, status string, userId string) (Task, error) {
 	const query = `
-INSERT INTO tasks (title, description, status)
-VALUES (?, ?, ?)
-RETURNING id, title, description, status, created_at, updated_at;`
+INSERT INTO tasks (title, description, status, user_id)
+VALUES (?, ?, ?, ?)
+RETURNING id, title, description, status,created_at, updated_at;`
 
 	var task Task
-	err := s.db.QueryRowContext(ctx, query, title, description, status).Scan(
+	err := s.db.QueryRowContext(ctx, query, title, description, status, userId).Scan(
 		&task.ID,
 		&task.Title,
 		&task.Description,
