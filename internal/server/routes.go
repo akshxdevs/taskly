@@ -94,6 +94,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 		Title       string `json:"title"`
 		Description string `json:"description"`
 		Status      string `json:"status"`
+		UserId      string `json:"userId"`
 	}
 
 	var req createTaskRequest
@@ -114,7 +115,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 		req.Status = "todo"
 	}
 
-	task, err := s.db.CreateTask(r.Context(), req.Title, req.Description, req.Status)
+	task, err := s.db.CreateTask(r.Context(), req.Title, req.Description, req.Status, req.UserId)
 	if err != nil {
 		log.Printf("failed creating task: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create task"})

@@ -14,6 +14,13 @@ function ChevronDownIcon() {
   );
 }
 
+function formatTaskTimestamp(timestamp: string): string {
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) return "Unknown";
+
+  return new Date(parsed).toLocaleString();
+}
+
 export function TasksPage() {
   const {
     session,
@@ -239,6 +246,9 @@ export function TasksPage() {
                   <div>
                     <h4 className="font-medium">{task.title}</h4>
                     <p className="text-sm text-zinc-400">{task.description || "No description"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Created: {formatTaskTimestamp(task.created_at)}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-zinc-800 px-3 py-1 font-mono text-xs text-zinc-200">
@@ -322,8 +332,17 @@ export function TasksPage() {
       ) : null}
 
       {toastMessage ? (
-        <div className="toast-pop fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-emerald-300/50 bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-100 backdrop-blur">
-          {toastMessage}
+        <div
+          className="toast-pop fixed right-6 top-6 z-50 flex min-w-56 items-center gap-2 rounded-xl border border-emerald-300/60 bg-emerald-500/20 px-4 py-3 text-sm font-medium text-emerald-100 shadow-[0_14px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20 text-emerald-200">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M5 12l4 4 10-10" />
+            </svg>
+          </span>
+          <span>{toastMessage}</span>
         </div>
       ) : null}
     </AppBackground>
