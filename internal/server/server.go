@@ -1,21 +1,26 @@
 package server
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	goredis "github.com/redis/go-redis/v9"
 
 	"go-taskly/internal/database"
+	tasklyredis "go-taskly/internal/redis"
 )
 
 type Server struct {
 	port int
 
-	db database.Service
+	db    database.Service
+	redis *goredis.Client
 }
 
 func NewServer() *http.Server {
@@ -28,7 +33,12 @@ func NewServer() *http.Server {
 	NewServer := &Server{
 		port: port,
 
-		db: database.New(),
+		db:    database.New(),
+		redis: tasklyredis.New(),
+	}
+
+	if err := tasklyredis.Ping(context.Background()); err != nil {
+		log.Printf("redis unavailable: %v", err)
 	}
 
 	// Declare Server config
