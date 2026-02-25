@@ -5,6 +5,7 @@ export type Task = {
   title: string;
   description: string;
   status: string;
+  userId: string;
   created_at: string;
   updated_at: string;
 };
