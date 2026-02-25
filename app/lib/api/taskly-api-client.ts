@@ -34,9 +34,9 @@ export async function fetchUserAuthApi(userId: string): Promise<UserAuth> {
   );
 }
 
-export async function fetchTasksApi(token: string): Promise<Task[]> {
+export async function fetchTasksApi(token: string,userId:string): Promise<Task[]> {
   return parseResponse<Task[]>(
-    await fetch(api("/api/v1/tasks"), {
+    await fetch(api(`/api/v1/tasks/${userId}`), {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     }),
@@ -45,7 +45,7 @@ export async function fetchTasksApi(token: string): Promise<Task[]> {
 
 export async function createTaskApi(
   token: string,
-  payload: Pick<Task, "title" | "description" | "status">,
+  payload: Pick<Task, "title" | "description" | "status" |"userId">,
 ): Promise<Task> {
   return parseResponse<Task>(
     await fetch(api("/api/v1/tasks"), {

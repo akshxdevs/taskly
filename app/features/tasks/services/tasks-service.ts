@@ -1,13 +1,13 @@
 import { createTaskApi, deleteTaskApi, fetchTasksApi, updateTaskStatusApi } from "@/lib/api";
 import type { Task } from "@/types";
 
-export function fetchTasks(token: string): Promise<Task[]> {
-  return fetchTasksApi(token);
+export function fetchTasks(token: string, userId: string): Promise<Task[]> {
+  return fetchTasksApi(token,userId);
 }
 
 export function createTask(
   token: string,
-  payload: Pick<Task, "title" | "description" | "status">,
+  payload: Pick<Task, "title" | "description" | "status" | "userId">,
 ): Promise<Task> {
   return createTaskApi(token, payload);
 }

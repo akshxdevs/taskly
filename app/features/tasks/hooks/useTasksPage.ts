@@ -28,6 +28,7 @@ export function useTasksPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [accessToken, setAccessToken] = useState("");
+  const [userId, setUserId] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [authData, setAuthData] = useState<UserAuth | null>(null);
   const [isBooting, setIsBooting] = useState(true);
@@ -55,18 +56,12 @@ export function useTasksPage() {
     setSession(activeSession);
     void (async () => {
       setIsLoading(true);
-      setStatusMessage("Verifying auth from cache...");
+      setStatusMessage("Verifying auth...");
       const runtimeToken = getRuntimeAuthToken();
 
       try {
-        let seededWithRuntimeToken = false;
-
         if (runtimeToken) {
           setAccessToken(runtimeToken);
-          const seededTasks = await fetchTasks(runtimeToken);
-          setTasks(sortTasksNewestFirst(seededTasks));
-          setStatusMessage(`Loaded ${seededTasks.length} task(s).`);
-          seededWithRuntimeToken = true;
         }
 
         const authResponse = await fetchUserAuthWithRetry(activeSession.user.id, 4, 300);
@@ -80,14 +75,13 @@ export function useTasksPage() {
 
         setAuthData(authResponse);
         setAccessToken(authResponse.token);
+        setUserId(authResponse.id);
         setRuntimeAuthToken(authResponse.token);
 
-        if (!seededWithRuntimeToken) {
-          setStatusMessage("Loading tasks...");
-          const response = await fetchTasks(authResponse.token);
-          setTasks(sortTasksNewestFirst(response));
-          setStatusMessage(`Loaded ${response.length} task(s).`);
-        }
+        setStatusMessage("Loading tasks...");
+        const response = await fetchTasks(authResponse.token, authResponse.id);
+        setTasks(sortTasksNewestFirst(response));
+        setStatusMessage(`Loaded ${response.length} task(s).`);
       } catch (error) {
         if (!runtimeToken) {
           clearSession();
@@ -127,7 +121,7 @@ export function useTasksPage() {
     setStatusMessage("Loading tasks...");
 
     try {
-      const response = await fetchTasks(activeToken);
+      const response = await fetchTasks(activeToken,userId);
       setTasks(sortTasksNewestFirst(response));
       setStatusMessage(`Loaded ${response.length} task(s).`);
     } catch (error) {
@@ -152,6 +146,7 @@ export function useTasksPage() {
         title: newTitle.trim(),
         description: newDescription.trim(),
         status: newStatus,
+        userId:userId
       });
       setNewTitle("");
       setNewDescription("");
