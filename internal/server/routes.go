@@ -32,7 +32,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	mux.Handle("POST /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.CreateTask)))
 	mux.Handle("GET /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.GetAllTask)))
-	mux.Handle("GET /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.GetTask)))
+	mux.Handle("GET /api/v1/task/{id}", AuthMiddleware(http.HandlerFunc(s.GetTask)))
+	mux.Handle("GET /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.GetTaskByUserId)))
 	mux.Handle("PATCH /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.UpdateTask)))
 	mux.Handle("DELETE /api/v1/tasks/{id}", AuthMiddleware(http.HandlerFunc(s.DeleteTask)))
 	mux.Handle("DELETE /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.DeleteAllTask)))
@@ -192,6 +193,35 @@ func (s *Server) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, task)
+}
+
+func (s *Server) GetTaskByUserId(w http.ResponseWriter, r *http.Request) {
+	idParam := r.PathValue("id")
+
+	userID, err := uuid.Parse(idParam)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid user id",
+		})
+		return
+	}
+
+	tasks, err := s.db.GetTaskByUserId(r.Context(), userID.String())
+	if err != nil {
+		if errors.Is(err, database.ErrTaskNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"error": "task not found",
+			})
+			return
+		}
+		log.Printf("failed fetching tasks for user %s: %v", userID, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to fetch tasks",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tasks)
 }
 
 func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
