@@ -25,6 +25,7 @@ type Service interface {
 	DeleteAllTask(ctx context.Context) error
 	GetAllTasks(ctx context.Context) ([]Task, error)
 	GetTaskByID(ctx context.Context, id int64) (Task, error)
+	GetTaskByUserId(ctx context.Context, userId string) ([]Task, error)
 	CreateUser(ctx context.Context, username, email, password string) (User, error)
 	CheckUser(ctx context.Context, email string) (User, error)
 	CheckUserById(ctx context.Context, id string) (UserAuth, error)
@@ -280,6 +281,38 @@ func (s *service) GetTaskByID(ctx context.Context, id int64) (Task, error) {
 		return Task{}, ErrTaskNotFound
 	}
 	return task, err
+}
+
+func (s *service) GetTaskByUserId(ctx context.Context, userId string) ([]Task, error) {
+	const query = `
+	SELECT id, title, description, status, created_at, updated_at
+	FROM tasks
+	WHERE user_id = ?
+	ORDER BY created_at DESC;
+	`
+	rows, err := s.db.QueryContext(ctx, query, userId)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var task Task
+		err := rows.Scan(
+			&task.ID,
+			&task.Title,
+			&task.Description,
+			&task.Status,
+			&task.CreatedAt,
+			&task.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
 }
 
 func (s *service) DeleteTask(ctx context.Context, id int64) error {
