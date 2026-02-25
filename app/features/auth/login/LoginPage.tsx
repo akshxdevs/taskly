@@ -17,7 +17,7 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState(AUTH_COPY.loginStatusIdle);
+  const [status, setStatus] = useState<string>(AUTH_COPY.loginStatusIdle);
 
   const registered = useMemo(() => params.get("registered") === "1", [params]);
 

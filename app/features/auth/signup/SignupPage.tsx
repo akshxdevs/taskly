@@ -13,7 +13,7 @@ export function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState(AUTH_COPY.signupStatusIdle);
+  const [status, setStatus] = useState<string>(AUTH_COPY.signupStatusIdle);
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSignup() {
