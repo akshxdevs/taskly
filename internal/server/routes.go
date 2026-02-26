@@ -19,6 +19,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -29,6 +30,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	mux.HandleFunc("/", s.HelloWorldHandler)
 
 	mux.HandleFunc("/health", s.healthHandler)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	mux.Handle("POST /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.CreateTask)))
 	mux.Handle("GET /api/v1/tasks", AuthMiddleware(http.HandlerFunc(s.GetAllTask)))
@@ -42,8 +44,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 	mux.HandleFunc("POST /api/v1/user/signup", s.Signup)
 	mux.HandleFunc("GET /api/v1/user/auth/{id}", s.CheckUserAuth)
 
-	// Wrap the mux with CORS middleware
-	return s.corsMiddleware(mux)
+	// Apply middleware stack.
+	handler := s.corsMiddleware(mux)
+	return s.observabilityMiddleware(handler)
 }
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
