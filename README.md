@@ -193,6 +193,36 @@ make test    # run tests
 make build   # build binary
 ```
 
+## 📈 Monitoring & Observability (Prometheus + Grafana)
+This repository now includes a ready-to-use local monitoring stack under `observability/`.
+
+### What is included
+- Prometheus scraping the API metrics endpoint (`/metrics`).
+- Grafana with an auto-provisioned Prometheus datasource.
+- A preloaded dashboard: **Taskly API Overview**.
+- Prometheus alert rules for:
+  - backend down
+  - high 5xx error ratio
+  - high p95 latency
+
+### Start the full stack
+```bash
+docker compose up -d --build
+```
+
+### Access URLs
+- API: `http://localhost:8090`
+- API metrics: `http://localhost:8090/metrics`
+- Prometheus: `http://localhost:9191`
+- Grafana: `http://localhost:3200`
+  - username: `admin`
+  - password: `admin`
+
+### Stop the stack
+```bash
+docker compose down
+```
+
 Local workflow expectations:
 - keep handlers thin and push storage concerns behind `database.Service`
 - add/adjust route tests when behavior changes
