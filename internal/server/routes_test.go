@@ -83,6 +83,10 @@ func (m *mockDB) GetTaskByID(_ context.Context, id int64) (database.Task, error)
 	return database.Task{}, database.ErrTaskNotFound
 }
 
+func (m *mockDB) GetTaskByUserId(_ context.Context, _ string) ([]database.Task, error) {
+	return append([]database.Task(nil), m.tasks...), nil
+}
+
 func (m *mockDB) CreateUser(_ context.Context, username, email, _ string) (database.User, error) {
 	return database.User{
 		Id:        uuid.New(),
@@ -194,7 +198,7 @@ func TestTaskRoutes(t *testing.T) {
 
 	t.Run("get task by id", func(t *testing.T) {
 		taskID := strconv.FormatInt(db.tasks[0].ID, 10)
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+taskID, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/task/"+taskID, nil)
 		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
@@ -213,7 +217,7 @@ func TestTaskRoutes(t *testing.T) {
 	})
 
 	t.Run("get missing task", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/9999", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/task/9999", nil)
 		req.Header.Set("Authorization", authHeader)
 		rr := httptest.NewRecorder()
 
