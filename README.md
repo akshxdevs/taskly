@@ -1,5 +1,5 @@
 # go-taskly
-Minimal task management API in Go with JWT auth, SQLite persistence, and Redis-backed token lookup.
+Minimal task management API in Go with JWT auth, SQLite persistence, Redis token cache, and Prometheus/Grafana observability.
 
 [![Build](https://img.shields.io/badge/build-go%20test%20.%2F...-brightgreen)](https://github.com/akshxdevs/go-taskly)
 [![Go Version](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go)](https://go.dev/)
@@ -7,49 +7,35 @@ Minimal task management API in Go with JWT auth, SQLite persistence, and Redis-b
 [![Latest Release](https://img.shields.io/github/v/release/akshxdevs/go-taskly)](https://github.com/akshxdevs/go-taskly/releases)
 [![License](https://img.shields.io/badge/license-unlicensed-lightgrey)](https://github.com/akshxdevs/go-taskly)
 
-## 🔍 Overview
-`go-taskly` is an HTTP API for task CRUD plus user signup/login and auth verification.  
-The codebase favors small, explicit layers:
-- `server`: HTTP transport and request validation.
-- `database`: persistence abstraction and SQLite implementation.
-- `redis`: centralized Redis client setup for token cache/read paths.
+## Overview
+`go-taskly` provides:
+- user signup/login with JWT issuance
+- task CRUD endpoints
+- auth verification via Redis-backed token lookup
+- built-in observability with Prometheus metrics and Grafana dashboards
 
-The project is intentionally simple to keep latency low, startup fast, and local development friction near zero.
+## Key Features
+- JWT auth middleware (`HS256`) for task APIs.
+- Strict JSON parsing (`DisallowUnknownFields`) for safer payload handling.
+- SQLite bootstrap with `users` and `tasks` schema initialization at startup.
+- Redis token cache (`auth:token:<user-uuid>`) used by `/api/v1/user/auth/{id}`.
+- Request metrics instrumentation via custom middleware.
+- Preconfigured Prometheus alerts and Grafana dashboard.
 
-## ✅ Key Features
-- JWT-based authentication (`HS256`) with explicit middleware on task routes.
-- Strict JSON decoding (`DisallowUnknownFields`) to reject ambiguous payloads.
-- SQLite persistence with schema bootstrap on startup.
-- Redis token caching to support `/api/v1/user/auth/{id}` token verification flow.
-- Clear HTTP status mapping for invalid input, missing resources, and auth failures.
-- Graceful shutdown with timeout-based server drain.
+## Tech Stack
+- Go `1.25.6`
+- `net/http` + `http.ServeMux`
+- SQLite (`mattn/go-sqlite3`)
+- Redis (`redis/go-redis/v9`)
+- JWT (`golang-jwt/jwt/v5`)
+- Prometheus + Grafana
 
-## 🧱 Architecture / Design
-The service follows a transport/service-store style:
-- HTTP handlers in `internal/server/routes.go` own request parsing, validation, and response formatting.
-- `database.Service` defines the persistence contract used by handlers, enabling mock-backed route tests.
-- SQLite is used as the source of truth for users and tasks.
-- Redis is used as a fast token cache keyed by user ID (`auth:token:<uuid>`).
-
-Why this design:
-- Interface-first DB access keeps handler logic testable without a running DB.
-- SQLite reduces operational overhead for local and single-node deployments.
-- Redis decouples token lookup from request body parsing for auth-check endpoints.
-
-## 🛠️ Tech Stack (and Why)
-- Go `1.25.6`: small runtime footprint, strong stdlib HTTP tooling.
-- `net/http`: no framework lock-in, transparent routing and middleware behavior.
-- SQLite (`mattn/go-sqlite3`): file-based reliability and easy local bootstrap.
-- Redis (`redis/go-redis/v9`): low-latency ephemeral token storage.
-- JWT (`golang-jwt/jwt/v5`): interoperable token format with standard claims.
-- `bcrypt` (`x/crypto`): password hash verification in login flow.
-
-## 📦 Installation & Setup
+## Installation
 ### Prerequisites
 - Go `1.25+`
-- Redis `6+` (or compatible)
+- Redis `6+`
 
-### Clone and run
+### Run locally
 ```bash
 git clone git@github.com:akshxdevs/go-taskly.git
 cd go-taskly
@@ -63,8 +49,8 @@ make build
 make test
 ```
 
-## ⚙️ Configuration
-The app reads environment variables via `.env` autoload.
+## Configuration
+Environment variables (autoloaded from `.env`):
 
 ```env
 PORT=8080
@@ -76,98 +62,122 @@ REDIS_DB=0
 ```
 
 Notes:
-- `AUTH_SECRET` must be set and consistent across login + auth verification.
-- `BLUEPRINT_DB_URL` defaults to `test.db` if unset.
-- Redis is optional at startup, but token-cache-dependent flows degrade if Redis is unavailable.
+- `AUTH_SECRET` is required for login/auth validation.
+- If `BLUEPRINT_DB_URL` is empty, SQLite defaults to `test.db`.
+- Redis is optional at startup; token lookup flows depend on it.
 
-## 🚀 Usage Examples
-### 1. Sign up
+## API Endpoints
+Public:
+- `GET /`
+- `GET /health`
+- `GET /metrics`
+- `POST /api/v1/user/signup`
+- `POST /api/v1/user/login`
+- `GET /api/v1/user/auth/{id}` (`id` is user UUID)
+
+Protected (requires `Authorization: Bearer <token>`):
+- `POST /api/v1/tasks`
+- `GET /api/v1/tasks`
+- `GET /api/v1/task/{id}` (`id` is numeric task ID)
+- `GET /api/v1/tasks/{id}` (`id` is user UUID, returns tasks for user)
+- `PATCH /api/v1/tasks/{id}` (`id` is numeric task ID)
+- `DELETE /api/v1/tasks/{id}` (`id` is numeric task ID)
+- `DELETE /api/v1/tasks`
+
+## Usage Examples
+### Sign up
 ```bash
 curl -X POST http://localhost:8080/api/v1/user/signup \
   -H "Content-Type: application/json" \
   -d '{"email":"dev@example.com","password":"pass1234"}'
 ```
 
-### 2. Login and receive JWT
+### Login
 ```bash
 curl -X POST http://localhost:8080/api/v1/user/login \
   -H "Content-Type: application/json" \
   -d '{"email":"dev@example.com","password":"pass1234"}'
 ```
 
-### 3. Create a task (authorized)
+### Create task
 ```bash
 curl -X POST http://localhost:8080/api/v1/tasks \
   -H "Authorization: Bearer <JWT>" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Write docs","description":"README cleanup","status":"todo"}'
+  -d '{"title":"Write docs","description":"README cleanup","status":"todo","userId":"<user-uuid>"}'
 ```
 
-### 4. Verify auth status by user ID
+## Core Functions (Server Layer)
+`internal/server/routes.go`
+- Route registration and request handling for health, tasks, and auth flows.
+- Includes helpers for strict JSON decoding, response writing, password validation, username generation, and JWT creation.
+
+`internal/server/middleware.go`
+- `AuthMiddleware` validates bearer token and injects user id in context.
+- `UserIDFromContext` retrieves user id from context.
+
+`internal/server/observability.go`
+- Captures per-request count and latency metrics for all routes except `/metrics`.
+
+## Database Service Contract
+`internal/database.Service` covers health checks, full task CRUD, user create/check flows, and connection close.  
+It is used as the handler dependency to keep route tests DB-agnostic.
+
+## Metrics (Complete)
+Custom application metrics exposed at `/metrics`:
+- `taskly_http_requests_total` (`CounterVec`)  
+  Labels: `method`, `route`, `status`
+- `taskly_http_request_duration_seconds` (`HistogramVec`)  
+  Labels: `method`, `route`, `status`  
+  Buckets: `prometheus.DefBuckets`  
+  Exported series: `_bucket`, `_sum`, `_count`
+
+Route labeling behavior:
+- Uses `r.Pattern` (for example `GET /api/v1/tasks` route pattern value).
+- Falls back to `route="unmatched"` when pattern is unavailable.
+- `/metrics` requests are explicitly excluded from custom instrumentation.
+
+Also exposed automatically by Prometheus Go client:
+- Go runtime metrics (`go_*`)
+- Process metrics (`process_*`)
+- Promhttp handler metrics (for metric endpoint handling internals)
+
+## Monitoring Stack (Prometheus + Grafana)
+Included under `observability/`:
+- Prometheus config: `observability/prometheus/prometheus.yml`
+- Alert rules: `observability/prometheus/alerts.yml`
+- Grafana datasource/dashboard provisioning
+- Dashboard: `Taskly API Overview`
+
+### Alerts configured
+- `TasklyBackendDown`
+- `TasklyHighErrorRate` (5xx ratio > 5% for 5m)
+- `TasklyHighLatencyP95` (p95 latency > 500ms for 10m)
+
+### Start full stack
 ```bash
-curl http://localhost:8080/api/v1/user/auth/<user-uuid>
+docker compose up -d --build
 ```
 
-## 📚 API / Core Modules
-### HTTP Endpoints
-- `GET /` health greeting.
-- `GET /health` DB health/status metadata.
-- `POST /api/v1/user/signup`
-- `POST /api/v1/user/login`
-- `GET /api/v1/user/auth/{id}`
-- `POST /api/v1/tasks` (auth middleware)
-- `GET /api/v1/tasks` (auth middleware)
-- `GET /api/v1/tasks/{id}` (auth middleware)
-- `PATCH /api/v1/tasks/{id}` (auth middleware)
-- `DELETE /api/v1/tasks/{id}` (auth middleware)
-- `DELETE /api/v1/tasks` (auth middleware)
+### URLs
+- API: `http://localhost:8090`
+- API metrics: `http://localhost:8090/metrics`
+- Prometheus: `http://localhost:9191`
+- Grafana: `http://localhost:3200` (`admin` / `admin`)
 
-### Internal Abstractions
-```go
-type Service interface {
-    CreateTask(ctx context.Context, title, description, status string) (Task, error)
-    GetTaskByID(ctx context.Context, id int64) (Task, error)
-    CreateUser(ctx context.Context, username, email, password string) (User, error)
-    CheckUserById(ctx context.Context, id string) (UserAuth, error)
-}
+### Stop stack
+```bash
+docker compose down
 ```
 
-```go
-if s.redis != nil {
-    _ = s.redis.Set(r.Context(), "auth:token:"+user.Id.String(), token, time.Hour).Err()
-}
-```
+## Health Payload Fields
+`GET /health` returns DB health plus connection stats:
+- `status`, `message`, `error`
+- `open_connections`, `in_use`, `idle`
+- `wait_count`, `wait_duration`
+- `max_idle_closed`, `max_lifetime_closed`
 
-## 🔐 Authentication / Security
-- Passwords are stored hashed (bcrypt), never returned in API payloads.
-- JWT uses `sub` claim for user ID and `exp` for token expiration.
-- Task endpoints require `Authorization: Bearer <token>`.
-- Middleware validates token format, signing method (`HS256`), signature, and non-empty `sub`.
-- CORS is enabled globally with explicit allow headers/methods.
-
-## 🗄️ Database / Storage Design
-SQLite schema is auto-created at startup:
-- `users` table: `id`, `username`, `email (unique)`, `password`, `created_at`.
-- `tasks` table: task metadata plus `user_id` FK reference to `users(id)` with `ON DELETE CASCADE`.
-
-Design rationale:
-- One-file persistence is easy to back up and run locally.
-- FK enforcement keeps task-user integrity without application-side joins for every write.
-
-## ⚡ Caching / Performance
-- Redis client is initialized once (`sync.Once`) in `internal/redis/redis.go`.
-- Login writes token to Redis with 1 hour TTL.
-- `/api/v1/user/auth/{id}` reads the cached token by `auth:token:<user-id>` and validates JWT claims.
-- Server timeouts are explicitly configured as `ReadTimeout: 10s`, `WriteTimeout: 30s`, and `IdleTimeout: 60s`.
-
-## 🧯 Error Handling & Edge Cases
-- Invalid JSON payloads return `400` through strict decoder.
-- Invalid IDs (`task id`, `uuid`) return `400`.
-- Missing records return `404` where applicable (`ErrTaskNotFound`).
-- Auth failures return `401` for invalid/expired credentials/tokens.
-- DB and Redis failures are logged with context.
-
-## 📁 Project Structure
+## Project Structure
 ```text
 .
 ├── cmd/
@@ -177,98 +187,29 @@ Design rationale:
 │   ├── redis/redis.go
 │   └── server/
 │       ├── middleware.go
+│       ├── observability.go
 │       ├── routes.go
 │       ├── routes_test.go
 │       └── server.go
+├── observability/
+│   ├── grafana/
+│   └── prometheus/
+├── Dockerfile
+├── docker-compose.yml
 ├── Makefile
-├── go.mod
 └── README.md
 ```
 
-## 🔄 Development Workflow
+## Development Commands
 ```bash
-make run     # start API
-make watch   # live reload via air
-make test    # run tests
-make build   # build binary
+make run
+make watch
+make test
+make build
 ```
 
-## 📈 Monitoring & Observability (Prometheus + Grafana)
-This repository now includes a ready-to-use local monitoring stack under `observability/`.
-
-### What is included
-- Prometheus scraping the API metrics endpoint (`/metrics`).
-- Grafana with an auto-provisioned Prometheus datasource.
-- A preloaded dashboard: **Taskly API Overview**.
-- Prometheus alert rules for:
-  - backend down
-  - high 5xx error ratio
-  - high p95 latency
-
-### Start the full stack
-```bash
-docker compose up -d --build
-```
-
-### Access URLs
-- API: `http://localhost:8090`
-- API metrics: `http://localhost:8090/metrics`
-- Prometheus: `http://localhost:9191`
-- Grafana: `http://localhost:3200`
-  - username: `admin`
-  - password: `admin`
-
-### Stop the stack
-```bash
-docker compose down
-```
-
-Local workflow expectations:
-- keep handlers thin and push storage concerns behind `database.Service`
-- add/adjust route tests when behavior changes
-- run `go test ./...` before commits
-
-## 🧪 Testing Strategy
-- Unit-style route tests in `internal/server/routes_test.go`.
-- `mockDB` satisfies `database.Service` to isolate HTTP behavior from real DB I/O.
-- Coverage targets HTTP status behavior, request validation, and route-level regressions.
-
-Suggested next layer:
-- integration tests for SQLite + Redis interactions in auth flow.
-
-## 🚢 Deployment Notes
-- Default runtime port: `8080` (`PORT` env override).
-- Requires writable filesystem path for SQLite DB file.
-- Requires stable `AUTH_SECRET` across instances.
-- Redis should be reachable from app runtime for auth-cache flow.
-- Graceful shutdown handles `SIGINT`/`SIGTERM` with a 5s timeout.
-
-## ⚖️ Limitations & Trade-offs
-- SQLite limits horizontal write scaling without additional coordination.
-- Current auth verification endpoint is Redis-cache-dependent by user ID.
-- No token revocation list beyond TTL-based key expiry.
-- No migrations framework yet; schema bootstrap is inline SQL.
-- No published OpenAPI spec yet.
-
-## 🗺️ Roadmap / Future Improvements
-- Attach tasks to authenticated user identity in handlers and queries.
-- Add refresh-token flow and explicit logout invalidation.
-- Add request-scoped structured logging and trace IDs.
-- Add migration tooling (`goose` or `atlas`) for schema evolution.
-- Add CI workflow with coverage publishing and lint gates.
-- Generate OpenAPI docs and client SDK stubs.
-
-## 🤝 Contributing Guidelines
-1. Fork the repo and create a feature branch.
-2. Keep changes scoped and include tests for behavior changes.
-3. Run `go test ./...` and ensure no regressions.
-4. Open a PR with clear problem statement and implementation notes.
-
-Conventions:
-- prefer small handlers and explicit error responses
-- keep storage changes behind `database.Service`
-- avoid breaking API response shapes without documenting migration notes
-
-## 📄 License
-No license file is currently present in the repository.  
-Add a `LICENSE` file (for example, MIT or Apache-2.0) before distributing beyond internal/team usage.
+## Current Limitations
+- SQLite is great for local/single-node usage but not high write-scale distributed workloads.
+- Auth verification endpoint depends on cached Redis token by user ID.
+- No migration tool yet (schema bootstrap is inline SQL).
+- No OpenAPI spec yet.
