@@ -1,0 +1,38 @@
+groups:
+  - name: taskly-alerts
+    rules:
+      - alert: TasklyBackendDown
+        expr: up{job="taskly-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taskly backend is down"
+          description: "Prometheus cannot scrape taskly-backend for more than 1 minute."
+
+      - alert: TasklyHighErrorRate
+        expr: |
+          (
+            sum(rate(taskly_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(taskly_http_requests_total[5m])), 1)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taskly backend high 5xx error rate"
+          description: "5xx error ratio is above 5% for 5 minutes."
+
+      - alert: TasklyHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(taskly_http_request_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taskly backend high p95 latency"
+          description: "p95 request latency is above 500ms for 10 minutes."
