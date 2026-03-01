@@ -5,7 +5,7 @@ Minimal task management API in Go with JWT auth, SQLite persistence, Redis token
 [![Go Version](https://img.shields.io/badge/go-1.25.6-00ADD8?logo=go)](https://go.dev/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/akshxdevs/go-taskly)](https://goreportcard.com/report/github.com/akshxdevs/go-taskly)
 [![Latest Release](https://img.shields.io/github/v/release/akshxdevs/go-taskly)](https://github.com/akshxdevs/go-taskly/releases)
-[![License](https://img.shields.io/badge/license-unlicensed-lightgrey)](https://github.com/akshxdevs/go-taskly)
+[![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 ## Overview
 `go-taskly` provides:
@@ -213,3 +213,6 @@ make build
 - Auth verification endpoint depends on cached Redis token by user ID.
 - No migration tool yet (schema bootstrap is inline SQL).
 - No OpenAPI spec yet.
+
+## License
+Licensed under the [MIT License](LICENSE).
