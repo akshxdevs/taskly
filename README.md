@@ -1,4 +1,4 @@
-# go-taskly
+# taskly
 Minimal task management API in Go with JWT auth, SQLite persistence, Redis token cache, and Prometheus/Grafana observability.
 
 [![Build](https://img.shields.io/badge/build-go%20test%20.%2F...-brightgreen)](https://github.com/akshxdevs/go-taskly)
